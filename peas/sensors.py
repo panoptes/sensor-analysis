@@ -1,3 +1,4 @@
+import json
 import os
 import yaml
 
@@ -33,34 +34,41 @@ class ArduinoSerialMonitor(object):
         # Store each serial reader
         self.serial_readers = dict()
 
-        if auto_detect:
+        if auto_detect or self.config['environment'].get('auto_detect', False):
+            self.logger.debug('performing auto-detect')
             for port_num in range(9):
                 port = '/dev/ttyACM{}'.format(port_num)
                 if os.path.exists(port):
-                    self.logger.debug("Trying to connect on {}".format(port))
-
+                    self.logger.debug("Device {} exists".format(port))
+                    serial_reader = None
                     sensor_name = None
-                    serial_reader = self._connect_serial(port)
-
                     num_tries = 5
-                    self.logger.debug("Getting name on {}".format(port))
                     while num_tries > 0:
+                        self.logger.debug("Trying to connect on {}".format(port))
+                        if serial_reader:
+                            try:
+                                serial_reader.disconnect()
+                            except Exception:
+                                pass
+                        serial_reader = self._connect_serial(port)
                         try:
                             data = serial_reader.get_reading()
                         except yaml.parser.ParserError:
                             pass
                         except AttributeError:
                             pass
-                        else:
-                            try:
-                                if 'name' in data:
-                                    sensor_name = data['name']
-                                    num_tries = 0
-                            except Exception as e:
-                                self.logger.warning("Read on serial: {}".format(e))
-                        num_tries -= 1
+                        self.logger.debug("Parsing reading from {}".format(port))
+                        try:
+                            parsed = json.loads(data[1])
+                            if 'name' in parsed:
+                                sensor_name = parsed['name']
+                                num_tries = 0
+                        except Exception as e:
+                            self.logger.warning("Read on serial: {}".format(e))
+                            num_tries -= 1
 
                     if sensor_name is not None:
+                        self.logger.warning("Found name '{}'".format(sensor_name))
                         self.serial_readers[sensor_name] = {
                             'reader': serial_reader,
                         }
