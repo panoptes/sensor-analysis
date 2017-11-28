@@ -38,9 +38,26 @@ class MixedUpTime(TimeISO):
 # -----------------------------------------------------------------------------
 class WeatherData(object):
 
-    """
-    This class fetches the weather data from online and checks that the data
-    is with in the given parameters tests that the weather conditions are safe.
+    """ Gets AAT weather data from  http://site.aao.gov.au/AATdatabase/met.html
+
+    Turns the weather data into a useable and meaningful table whose columns are the
+    entries of the data. The table only features one row (Excluding the title row)
+    which has the numerical data of all the entries.
+
+    The data is then compared with specified parameters and if the data is not within
+    the parameters then the safety condition of that entry is defined as False, i.e.
+    not safe.
+    Data is also given the weather condition, for example if the wind value is greater
+    that the one specified the weather condition will be 'windy'.
+
+    Once all the required data has been defined and given conditions, it will then
+    decide if the system is safe. If one value is False then the safety condition of
+    the system is False. All entries must be True so that the safety condition can
+    return True.
+
+    The final conditions and values are then sent to the dome controller to either
+    leave, open or close the dome. They are also saved in a database so that previous
+    entries can be retrived.
     """
 
     def __init__(self, use_mongo=True):
@@ -64,12 +81,14 @@ class WeatherData(object):
         self.table_data = None
         self.weather_entries = list()
 
+    # sends message to dome controller
     def send_message(self, msg, channel='weather'):
         if self.messaging is None:
             self.messaging = PanMessaging.create_publisher(6510)
 
         self.messaging.send_message(channel, msg)
 
+    # stores current weather conditions in a dictionary
     def capture(self, use_mongo=False, send_message=False, **kwargs):
         self.logger.debug("Updating weather data")
 
@@ -102,10 +121,8 @@ class WeatherData(object):
 
         return data
 
+    # decide whether the weather conditions are safe or unsafe
     def make_safety_decision(self):
-        """
-        Method makes decision whether conditions are safe or unsafe.
-        """
         self.logger.debug('Making safety decision with {}'.format(self.lcl_cfg.get('name')))
         self.logger.debug('Found {} weather data entries in last {:.0f} minutes'.format(
             len(self.fetch_met_data()), self.safety_delay))
@@ -127,6 +144,7 @@ class WeatherData(object):
                 'Gust': gust[0],
                 'Rain': rain[0]}
 
+    # get metdata from the website and turn into a readable and usable table
     def fetch_met_data(self):
         try:
             cache_age = Time.now() - self._met_data['Time (UTC)'][0] * 86400
@@ -162,6 +180,7 @@ class WeatherData(object):
 
         return self._met_data
 
+    # check cloud condition
     def _get_cloud_safety(self):
             safety_delay = self.safety_delay
 
@@ -195,6 +214,7 @@ class WeatherData(object):
 
             return cloud_condition, sky_safe
 
+    # check wind and gust conditions
     def _get_wind_safety(self):
             safety_delay = self.safety_delay
             entries = self.fetch_met_data()
@@ -256,6 +276,7 @@ class WeatherData(object):
 
             return (wind_condition, wind_safe), (gust_condition, gust_safe)
 
+    # check rain condition
     def _get_rain_alarm_safety(self):
         safety_delay = self.safety_delay
         entries = self.fetch_met_data()
