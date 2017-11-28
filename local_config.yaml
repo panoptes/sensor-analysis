@@ -1,0 +1,56 @@
+weather:
+  data:
+    name: 'AAT metdata'
+    link: 'http://site.aao.gov.au/met/metdata.dat'
+    column_names:  ['Time (UTC)',
+                    'Outside air temperature',
+                    'Dome air temperature',
+                    'Mirror temperature',
+                    'Dome dewpoint',
+                    'Outside humidity',
+                    'Barometric pressure',
+                    'Average wind speed',
+                    'Maximum wind gust',
+                    'Average wind direction',
+                    'Dome door status', # closed = 0 | partially open = 2 | open = 4
+                    'Rain sensor', # no rain = 0 | rain > 0
+                    'Outside dewpoint',
+                    'Sky-ambient',
+                    'Sky-ambient uncertainty',
+                    'Boltwood sky brightness', # dark = 0 | light > 0
+                    'Boltwood rain flag', # no rain = 0 | rain > 0
+                    'Boltwood wet flag', # dry = 0 | wet > 0
+                    'Rain since 9am',
+                    'SQM sky brightness']
+    # be sure to have the same number of entries in column_names and column_units
+    column_units:  [u.dimensionless_unscaled,
+                    u.Celsius,
+                    u.Celsius,
+                    u.Celsius,
+                    u.Celsius,
+                    u.percent,
+                    cds.mmHg,
+                    u.km / u.hour,
+                    u.km / u.hour,
+                    u.degree,
+                    u.dimensionless_unscaled,
+                    u.dimensionless_unscaled,
+                    u.Celsius,
+                    u.Celsius,
+                    u.Celsius,
+                    u.dimensionless_unscaled,
+                    u.dimensionless_unscaled,
+                    u.dimensionless_unscaled,
+                    u.mm,
+                    u.ABmag]
+    max_age: 60.
+    cache_age: 1.382e10
+    sky_ambient: 'Sky-ambient'
+    sky_ambient_uncertainty: 'Sky-ambient uncertainty'
+    average_wind_speed: 'Average wind speed'
+    maximum_wind_gust: 'Maximum wind gust'
+    rain_sensor: 'Rain sensor'
+    rain_flag: 'Boltwood rain flag'
+    wet_flag: 'Boltwood wet flag'
+    threshold_rain: 0
+    threshold_wet: 0
