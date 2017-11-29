@@ -81,7 +81,7 @@ class WeatherData(object):
         self.table_data = None
         self.weather_entries = list()
 
-    # sends message to dome controller
+    # sends message to dome controller  *doesn't send to dome controller*
     def send_message(self, msg, channel='weather'):
         if self.messaging is None:
             self.messaging = PanMessaging.create_publisher(6510)
@@ -134,7 +134,7 @@ class WeatherData(object):
         wind, gust = self._get_wind_safety()
         rain = self._get_rain_alarm_safety()
 
-        safe = cloud[1] and wind[1] and gust[1] and rain[1]
+        safe = cloud[1] & wind[1] & gust[1] & rain[1]
 
         self.logger.debug('Weather Safe: {}'.format(safe))
 
@@ -303,16 +303,6 @@ class WeatherData(object):
             else:
                 rain_condition = 'NO RAIN'
                 rain_safe = True
-            # If safe now, check last 15 minutes
-            if rain_safe:
-                if rain_sensor > threshold_rain and rain_flag > threshold_rain:
-                    self.logger.debug(' UNSAFE:  Rain in last {:.0f} min.'.format(safety_delay))
-                    rain_safe = False
-                elif wet_flag > threshold_wet:
-                    self.logger.debug(' UNSAFE:  Wet in last {:.0f} min.'.format(safety_delay))
-                    rain_safe = False
-                else:
-                    rain_safe = True
 
             self.logger.debug('Rain Condition: {}'.format(rain_condition))
 
