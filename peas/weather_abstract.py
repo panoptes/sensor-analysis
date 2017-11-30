@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from abc import ABCMeta, abstractmethod
 
 import logging
 import numpy as np
@@ -34,6 +35,7 @@ class WeatherAbstract(object):
     """ Base class for checking generic weather data and sending it to the
         required location.
     """
+    __metaclass__ = ABCMeta
 
     def __init__(self, use_mongo=True):
         self.config = load_config()
