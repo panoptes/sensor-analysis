@@ -22,7 +22,6 @@ from pocs.utils.messaging import PanMessaging
 from . import load_config
 from .PID import PID
 
-
 def get_mongodb():
     from pocs.utils.database import PanMongo
     return PanMongo()
@@ -43,9 +42,6 @@ class WeatherAbstract(object):
         # Read configuration
         self.cfg = self.config['weather']['aag_cloud']
         self.safety_delay = self.cfg.get('safety_delay', 15.)
-
-        self.logger = logging.getLogger(self.cfg.get('product', 'product-unknown'))
-        self.logger.setLevel(logging.INFO)
 
         self.db = None
         if use_mongo:

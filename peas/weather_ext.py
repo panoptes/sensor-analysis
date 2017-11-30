@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 
-from weather_abstract import WeatherAbstract
+import requests
+import logging
 
-def get_mongodb():
-    from pocs.utils.database import PanMongo
-    return PanMongo()
+import astropy.units as u
+from astropy.units import cds
+from astropy.table import Table
+from astropy.time import Time, TimeISO, TimeDelta
+
+from pocs.utils.messaging import PanMessaging
+from . import load_config
+from weather_abstract import WeatherAbstract
+from weather_abstract import get_mongodb
 
 
 class MixedUpTime(TimeISO):
@@ -54,6 +61,9 @@ class WeatherData(WeatherAbstract):
 
     def __init__(self, use_mongo=True):
         WeatherAbstract.__init__(self, use_mongo=True)
+
+        self.logger = logging.getLogger(self.cfg.get('product_2', 'product-unknown'))
+        self.logger.setLevel(logging.INFO)
 
         self.lcl_cfg = self.local_config['weather']['data']
         self.max_age = TimeDelta(self.lcl_cfg.get('max_age', 60.), format='sec')

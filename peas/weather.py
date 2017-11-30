@@ -17,12 +17,7 @@ from pocs.utils.messaging import PanMessaging
 from . import load_config
 from .PID import PID
 from weather_abstract import WeatherAbstract
-
-
-def get_mongodb():
-    from pocs.utils.database import PanMongo
-    return PanMongo()
-
+from weather_abstract import get_mongodb
 
 def movingaverage(interval, window_size):
     """ A simple moving average function """
@@ -104,6 +99,9 @@ class AAGCloudSensor(WeatherAbstract):
 
     def __init__(self, serial_address=None, use_mongo=True):
         WeatherAbstract.__init__(self, use_mongo=True)
+
+        self.logger = logging.getLogger(self.cfg.get('product_1', 'product-unknown'))
+        self.logger.setLevel(logging.INFO)
 
         # Initialize Serial Connection
         if serial_address is None:
