@@ -586,13 +586,13 @@ class AAGCloudSensor(WeatherAbstract):
             self.wind_speed = None
         return self.wind_speed
 
-    @property
     def send_message(self, msg, channel='weather'):
+        super.send_message()
 
-    @property
     def capture(self, use_mongo=False, send_message=False, **kwargs):
         """ Query the CloudWatcher """
 
+        super.capture()
         data['weather_sensor_firmware_version'] = self.firmware_version
         data['weather_sensor_serial_number'] = self.serial_number
 
@@ -761,12 +761,13 @@ class AAGCloudSensor(WeatherAbstract):
                 ))
                 self.set_PWM(new_PWM)
 
-    @property ###
     def make_safety_decision(self, current_values):
+        super.make_safety_decision()
         self.logger.debug('Found {} weather data entries in last {:.0f} minutes'.format(
             len(self.weather_entries), self.safety_delay))
 
         safe = False
+        data['Product'] = self.cfg.get('product_1')
 
         # Tuple with condition,safety
         cloud = self._get_cloud_safety(current_values)
@@ -789,38 +790,19 @@ class AAGCloudSensor(WeatherAbstract):
                 'Gust': gust[0],
                 'Rain': rain[0]}
 
-    @property ###
     def _get_cloud_safety(self, current_values):
         entries = self.weather_entries
 
         sky_diff = [x['sky_temp_C'] - x['ambient_temp_C']
                     for x in entries
                     if ('ambient_temp_C' and 'sky_temp_C') in x.keys()]
+        max_sky_diff = max(sky_diff)
+        last_cloud = current_values['sky_temp_C'] - current_values['ambient_temp_C']
 
-        if len(sky_diff) == 0:
-            self.logger.debug('  UNSAFE: no sky temperatures found')
-            sky_safe = False
-            cloud_condition = 'Unknown'
-        else:
-            if max(sky_diff) > threshold_cloudy:
-                self.logger.debug('UNSAFE: Cloudy in last {} min. Max sky diff {:.1f} C'.format(
-                                  safety_delay, max(sky_diff)))
-                sky_safe = False
-            else:
-                sky_safe = True
-
-            last_cloud = current_values['sky_temp_C'] - current_values['ambient_temp_C']
-            if last_cloud > threshold_very_cloudy:
-                cloud_condition = 'Very Cloudy'
-            elif last_cloud > threshold_cloudy:
-                cloud_condition = 'Cloudy'
-            else:
-                cloud_condition = 'Clear'
-            self.logger.debug('Cloud Condition: {} (Sky-Amb={:.1f} C)'.format(cloud_condition, sky_diff[-1]))
+        super._get_cloud_safety()
 
         return cloud_condition, sky_safe
 
-    @property ###
     def _get_wind_safety(self, current_values):
         entries = self.weather_entries
 
@@ -831,61 +813,23 @@ class AAGCloudSensor(WeatherAbstract):
                       for x in entries
                       if 'wind_speed_KPH' in x.keys()]
 
-        if len(wind_speed) == 0:
-            self.logger.debug('  UNSAFE: no wind speed readings found')
-            wind_safe = False
-            gust_safe = False
-            wind_condition = 'Unknown'
-            gust_condition = 'Unknown'
-        else:
-            start_time = entries[0]['date']
-            if type(start_time) == str:
-                start_time = date_parser(entries[0]['date'])
+        wind_gust = max(wind_speed)
 
-            typical_data_interval = (end_time - start_time).total_seconds() / len(entries)
+        start_time = date_parser(entries[0]['date'])
+        typical_data_interval = (end_time - start_time).total_seconds() / len(entries)
+        mavg_count = int(np.ceil(120. / typical_data_interval))  # What is this 120?
+        wind_mavg = movingaverage(wind_speed, mavg_count)
 
-            mavg_count = int(np.ceil(120. / typical_data_interval))  # What is this 120?
-            wind_mavg = movingaverage(wind_speed, mavg_count)
+        wind_speed = max(wind_mavg)
 
-            # Windy?
-            if max(wind_mavg) > threshold_very_windy:
-                self.logger.debug('  UNSAFE:  Very windy in last {:.0f} min. Max wind speed {:.1f} kph'.format(
-                    safety_delay, max(wind_mavg)))
-                wind_safe = False
-            else:
-                wind_safe = True
-
-            if wind_mavg[-1] > threshold_very_windy:
-                wind_condition = 'Very Windy'
-            elif wind_mavg[-1] > threshold_windy:
-                wind_condition = 'Windy'
-            else:
-                wind_condition = 'Calm'
-            self.logger.debug('  Wind Condition: {} ({:.1f} km/h)'.format(wind_condition, wind_mavg[-1]))
-
-            # Gusty?
-            if max(wind_speed) > threshold_very_gusty:
-                self.logger.debug('  UNSAFE:  Very gusty in last {:.0f} min. Max gust speed {:.1f} kph'.format(
-                    safety_delay, max(wind_speed)))
-                gust_safe = False
-            else:
-                gust_safe = True
-
-            current_wind = current_values.get('wind_speed_KPH', 0.0)
-            if current_wind > threshold_very_gusty:
-                gust_condition = 'Very Gusty'
-            elif current_wind > threshold_gusty:
-                gust_condition = 'Gusty'
-            else:
-                gust_condition = 'Calm'
-
-            self.logger.debug('  Gust Condition: {} ({:.1f} km/h)'.format(gust_condition, wind_speed[-1]))
+        super._get_wind_safety()
 
         return (wind_condition, wind_safe), (gust_condition, gust_safe)
 
-    @property ###
     def _get_rain_safety(self, current_values):
+        super._get_rain_safety()
         entries = self.weather_entries
+
         threshold_wet = self.cfg.get('threshold_wet', 2000.)
         threshold_rain = self.cfg.get('threshold_rainy', 1700.)
 

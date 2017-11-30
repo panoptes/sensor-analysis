@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from abc import ABCMeta, abstractmethod
 
 import logging
 import numpy as np
@@ -34,7 +33,6 @@ class WeatherAbstract(object):
     """ Base class for checking generic weather data and sending it to the
         required location.
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, use_mongo=True):
         self.config = load_config()
@@ -51,24 +49,18 @@ class WeatherAbstract(object):
         self.safe_dict = None
         self.weather_entries = list()
 
-    @abstractmethod
     def send_message(self, msg, channel='weather'):
         if self.messaging is None:
             self.messaging = PanMessaging.create_publisher(6510)
 
         self.messaging.send_message(channel, msg)
 
-    @abstractmethod
     def capture(self):
         self.logger.debug("Updating weather data")
-
         data = {}
-        data['Product'] = self.cfg.get('product')
 
         return data
 
-    # still needs to be improved
-    @abstractmethod
     def make_safety_decision(self):
         self.logger.debug('Making safety decision with {}'.format(self.cfg.get('product')))
 
@@ -78,18 +70,34 @@ class WeatherAbstract(object):
                 'Gust': gust[0],
                 'Rain': rain[0]}
 
-    # still needs to be improved
-    @abstractmethod
     def _get_cloud_safety(self):
         safety_delay = self.safety_delay
 
         threshold_cloudy = self.cfg.get('threshold_cloudy', -22.5)
         threshold_very_cloudy = self.cfg.get('threshold_very_cloudy', -15.)
 
+        if len(sky_diff) == 0:
+            self.logger.debug('  UNSAFE: no sky temperatures found')
+            sky_safe = False
+            cloud_condition = 'Unknown'
+        else:
+            if max_sky_diff > threshold_cloudy:
+                self.logger.debug('UNSAFE: Cloudy in last {} min. Max sky diff {:.1f} C'.format(
+                                  safety_delay, max_sky_diff))
+                sky_safe = False
+            else:
+                sky_safe = True
+
+            if last_cloud > threshold_very_cloudy:
+                cloud_condition = 'Very Cloudy'
+            elif last_cloud > threshold_cloudy:
+                cloud_condition = 'Cloudy'
+            else:
+                cloud_condition = 'Clear'
+            self.logger.debug('Cloud Condition: {} (Sky-Amb={:.1f} C)'.format(cloud_condition, last_cloud))
+
         return cloud_condition, sky_safe
 
-    # still needs to be improved
-    @abstractmethod
     def _get_wind_safety(self):
         safety_delay = self.safety_delay
 
@@ -99,10 +107,53 @@ class WeatherAbstract(object):
         threshold_gusty = self.cfg.get('threshold_gusty', 40)
         threshold_very_gusty = self.cfg.get('threshold_very_gusty', 50)
 
+        if len(wind_gust) == 0:
+            self.logger.debug(' UNSAFE: no maximum wind gust readings found')
+            gust_safe = False
+            gust_condition = 'Unknown'
+
+        if len(wind_speed) == 0:
+            self.logger.debug(' UNSAFE: no average wind speed readings found')
+            wind_safe = False
+            wind_condition = 'Unknown'
+        else:
+            # Windy?
+            if wind_speed > threshold_very_windy:
+                self.logger.debug(' UNSAFE:  Very windy in last {:.0f} min. Average wind speed {:.1f} kph'.format(
+                                  safety_delay, wind_speed))
+                wind_safe = False
+            else:
+                wind_safe = True
+
+            if wind_speed > threshold_very_windy:
+                wind_condition = 'Very Windy'
+            elif wind_speed > threshold_windy:
+                wind_condition = 'Windy'
+            else:
+                wind_condition = 'Calm'
+                self.logger.debug('Wind Condition: {} ({:.1f} km/h)'.format(
+                                  wind_condition, wind_speed))
+
+            # Gusty?
+            if wind_gust > threshold_very_gusty:
+                self.logger.debug(' UNSAFE:  Very gusty in last {:.0f} min. Max gust speed {:.1f} kph'.format(
+                                  safety_delay, wind_gust))
+                gust_safe = False
+            else:
+                gust_safe = True
+
+            if wind_gust > threshold_very_gusty:
+                gust_condition = 'Very Gusty'
+            elif wind_gust > threshold_gusty:
+                gust_condition = 'Gusty'
+            else:
+                gust_condition = 'Calm'
+
+            self.logger.debug('Gust Condition: {} ({:.1f} km/h)'.format(
+                              gust_condition, wind_gust))
+
         return (wind_condition, wind_safe), (gust_condition, gust_safe)
 
-    # still needs to be improved
-    @abstractmethod
     def _get_rain_safety(self):
         safety_delay = self.safety_delay
 
