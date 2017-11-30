@@ -14,6 +14,7 @@ environment:
 weather:
     station: mongo
     aag_cloud:
+        product: 'aag-cloudsensor'
         serial_port: '/dev/ttyUSB1'
         threshold_cloudy: -25
         threshold_very_cloudy: -15.

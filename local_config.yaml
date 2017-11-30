@@ -1,6 +1,5 @@
 weather:
   data:
-    name: 'AAT metdata'
     link: 'http://site.aao.gov.au/met/metdata.dat'
     column_names:  ['Time (UTC)',
                     'Outside air temperature',

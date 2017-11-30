@@ -1,14 +1,6 @@
-import requests
-import logging
+#!/usr/bin/env python3
 
-import astropy.units as u
-from astropy.units import cds
-from astropy.table import Table
-from astropy.time import Time, TimeISO, TimeDelta
-
-from pocs.utils.messaging import PanMessaging
-
-from . import load_config
+from weather_abstract import WeatherAbstract
 
 def get_mongodb():
     from pocs.utils.database import PanMongo
@@ -36,7 +28,7 @@ class MixedUpTime(TimeISO):
 # -----------------------------------------------------------------------------
 # External weather data class
 # -----------------------------------------------------------------------------
-class WeatherData(object):
+class WeatherData(WeatherAbstract):
 
     """ Gets AAT weather data from  http://site.aao.gov.au/AATdatabase/met.html
 
@@ -61,40 +53,18 @@ class WeatherData(object):
     """
 
     def __init__(self, use_mongo=True):
-        self.config = load_config()
-        self.logger = logging.getLogger('aat-weatherdata')
-        self.logger.setLevel(logging.INFO)
-
-        # Read configuration
-        self.cfg = self.config['weather']['aag_cloud']
-        self.max_age = TimeDelta(self.lcl_cfg.get('max_age', 60.), format='sec')
+        WeatherAbstract.__init__(self, use_mongo=True)
 
         self.lcl_cfg = self.local_config['weather']['data']
-        self.safety_delay = self.cfg.get('safety_delay', 15.)
+        self.max_age = TimeDelta(self.lcl_cfg.get('max_age', 60.), format='sec')
 
-        self.db = None
-        if use_mongo:
-            self.db = get_mongodb()
-
-        self.messaging = None
-        self.safe_dict = None
         self.table_data = None
-        self.weather_entries = list()
 
-    # sends message to dome controller  *doesn't send to dome controller*
+    @property
     def send_message(self, msg, channel='weather'):
-        if self.messaging is None:
-            self.messaging = PanMessaging.create_publisher(6510)
 
-        self.messaging.send_message(channel, msg)
-
-    # stores current weather conditions in a dictionary
+    @property
     def capture(self, use_mongo=False, send_message=False, **kwargs):
-        self.logger.debug("Updating weather data")
-
-        data = {}
-        data['Weather data'] = self.lcl_cfg.get('name')
-
         self.table_data = self.fetch_met_data()
         col_names = self.lcl_cfg.get('column_names')
 
@@ -121,9 +91,8 @@ class WeatherData(object):
 
         return data
 
-    # decide whether the weather conditions are safe or unsafe
+    @property ###
     def make_safety_decision(self):
-        self.logger.debug('Making safety decision with {}'.format(self.lcl_cfg.get('name')))
         self.logger.debug('Found {} weather data entries in last {:.0f} minutes'.format(
             len(self.fetch_met_data()), self.safety_delay))
 
@@ -132,7 +101,7 @@ class WeatherData(object):
         # Tuple with condition,safety
         cloud = self._get_cloud_safety()
         wind, gust = self._get_wind_safety()
-        rain = self._get_rain_alarm_safety()
+        rain = self._get_rain_safety()
 
         safe = cloud[1] & wind[1] & gust[1] & rain[1]
 
@@ -144,7 +113,6 @@ class WeatherData(object):
                 'Gust': gust[0],
                 'Rain': rain[0]}
 
-    # get metdata from the website and turn into a readable and usable table
     def fetch_met_data(self):
         try:
             cache_age = Time.now() - self._met_data['Time (UTC)'][0] * 86400
@@ -180,105 +148,93 @@ class WeatherData(object):
 
         return self._met_data
 
-    # check cloud condition
+    @property ###
     def _get_cloud_safety(self):
-            safety_delay = self.safety_delay
+        entries = self.fetch_met_data()
 
-            entries = self.fetch_met_data()
-            threshold_cloudy = self.cfg.get('threshold_cloudy', -22.5)
-            threshold_very_cloudy = self.cfg.get('threshold_very_cloudy', -15.)
+        sky_amb = entries[self.lcl_cfg.get('sky_ambient')]
+        sky_amb_u = entries[self.lcl_cfg.get('sky_ambient_uncertainty', 0)]
 
-            sky_amb = entries[self.lcl_cfg.get('sky_ambient')]
-            sky_amb_u = entries[self.lcl_cfg.get('sky_ambient_uncertainty', 0)]
-
-            if len(sky_amb) == 0:
-                print(' UNSAFE: no sky temperatures found')
+        if len(sky_amb) == 0:
+            print(' UNSAFE: no sky temperatures found')
+            sky_safe = False
+            cloud_condition = 'Unknown'
+        else:
+            if (sky_amb + sky_amb_u) > threshold_cloudy:
+                self.logger.debug(' UNSAFE: Cloudy in last {:.0f} min. Max sky amb {:.1f} C'.format(
+                                  safety_delay, sky_amb + sky_amb_u))
                 sky_safe = False
-                cloud_condition = 'Unknown'
             else:
-                if (sky_amb + sky_amb_u) > threshold_cloudy:
-                    self.logger.debug(' UNSAFE: Cloudy in last {:.0f} min. Max sky amb {:.1f} C'.format(
-                                      safety_delay, sky_amb + sky_amb_u))
-                    sky_safe = False
+                sky_safe = True
+
+                if sky_amb > threshold_very_cloudy:
+                    cloud_condition = 'Very Cloudy'
+                elif sky_amb > threshold_cloudy:
+                    cloud_condition = 'Cloudy'
                 else:
-                    sky_safe = True
+                    cloud_condition = 'Clear'
+                    self.logger.debug(' Cloud Condition: {} (Sky-Amb={:.1f} C)'.format(
+                                      cloud_condition, sky_amb))
 
-                    if sky_amb > threshold_very_cloudy:
-                        cloud_condition = 'Very Cloudy'
-                    elif sky_amb > threshold_cloudy:
-                        cloud_condition = 'Cloudy'
-                    else:
-                        cloud_condition = 'Clear'
-                        self.logger.debug(' Cloud Condition: {} (Sky-Amb={:.1f} C)'.format(
-                                          cloud_condition, sky_amb))
+        return cloud_condition, sky_safe
 
-            return cloud_condition, sky_safe
-
-    # check wind and gust conditions
+    @property ###
     def _get_wind_safety(self):
-            safety_delay = self.safety_delay
-            entries = self.fetch_met_data()
+        entries = self.fetch_met_data()
 
-            threshold_windy = self.cfg.get('threshold_windy', 20)
-            threshold_very_windy = self.cfg.get('threshold_very_windy', 30)
+        # Wind (average and gusts)
+        wind_speed = entries[self.lcl_cfg.get('average_wind_speed')]
+        wind_gust = entries[self.lcl_cfg.get('maximum_wind_gust')]
 
-            threshold_gusty = self.cfg.get('threshold_gusty', 40)
-            threshold_very_gusty = self.cfg.get('threshold_very_gusty', 50)
+        if len(wind_gust) == 0:
+            self.logger.debug(' UNSAFE: no maximum wind gust readings found')
+            gust_safe = False
+            gust_condition = 'Unknown'
 
-            # Wind (average and gusts)
-            wind_speed = entries[self.lcl_cfg.get('average_wind_speed')]
-            wind_gust = entries[self.lcl_cfg.get('maximum_wind_gust')]
-
-            if len(wind_gust) == 0:
-                self.logger.debug(' UNSAFE: no maximum wind gust readings found')
-                gust_safe = False
-                gust_condition = 'Unknown'
-
-            if len(wind_speed) == 0:
-                self.logger.debug(' UNSAFE: no average wind speed readings found')
+        if len(wind_speed) == 0:
+            self.logger.debug(' UNSAFE: no average wind speed readings found')
+            wind_safe = False
+            wind_condition = 'Unknown'
+        else:
+            # Windy?
+            if wind_speed > threshold_very_windy:
+                self.logger.debug(' UNSAFE:  Very windy in last {:.0f} min. Average wind speed {:.1f} kph'.format(
+                                  safety_delay, wind_speed))
                 wind_safe = False
-                wind_condition = 'Unknown'
             else:
-                # Windy?
-                if wind_speed > threshold_very_windy:
-                    self.logger.debug(' UNSAFE:  Very windy in last {:.0f} min. Average wind speed {:.1f} kph'.format(
-                                      safety_delay, wind_speed))
-                    wind_safe = False
-                else:
-                    wind_safe = True
+                wind_safe = True
 
-                if wind_speed > threshold_very_windy:
-                    wind_condition = 'Very Windy'
-                elif wind_speed > threshold_windy:
-                    wind_condition = 'Windy'
-                else:
-                    wind_condition = 'Calm'
-                    self.logger.debug('Wind Condition: {} ({:.1f} km/h)'.format(
-                                      wind_condition, wind_speed))
+            if wind_speed > threshold_very_windy:
+                wind_condition = 'Very Windy'
+            elif wind_speed > threshold_windy:
+                wind_condition = 'Windy'
+            else:
+                wind_condition = 'Calm'
+                self.logger.debug('Wind Condition: {} ({:.1f} km/h)'.format(
+                                  wind_condition, wind_speed))
 
-                # Gusty?
-                if wind_gust > threshold_very_gusty:
-                    self.logger.debug(' UNSAFE:  Very gusty in last {:.0f} min. Max gust speed {:.1f} kph'.format(
-                                      safety_delay, wind_gust))
-                    gust_safe = False
-                else:
-                    gust_safe = True
+            # Gusty?
+            if wind_gust > threshold_very_gusty:
+                self.logger.debug(' UNSAFE:  Very gusty in last {:.0f} min. Max gust speed {:.1f} kph'.format(
+                                  safety_delay, wind_gust))
+                gust_safe = False
+            else:
+                gust_safe = True
 
-                if wind_gust > threshold_very_gusty:
-                    gust_condition = 'Very Gusty'
-                elif wind_gust > threshold_gusty:
-                    gust_condition = 'Gusty'
-                else:
-                    gust_condition = 'Calm'
+            if wind_gust > threshold_very_gusty:
+                gust_condition = 'Very Gusty'
+            elif wind_gust > threshold_gusty:
+                gust_condition = 'Gusty'
+            else:
+                gust_condition = 'Calm'
 
-                self.logger.debug('Gust Condition: {} ({:.1f} km/h)'.format(
-                                  gust_condition, wind_gust))
+            self.logger.debug('Gust Condition: {} ({:.1f} km/h)'.format(
+                              gust_condition, wind_gust))
 
-            return (wind_condition, wind_safe), (gust_condition, gust_safe)
+        return (wind_condition, wind_safe), (gust_condition, gust_safe)
 
-    # check rain condition
-    def _get_rain_alarm_safety(self):
-        safety_delay = self.safety_delay
+    @property ###
+    def _get_rain_safety(self):
         entries = self.fetch_met_data()
 
         threshold_rain = self.lcl_cfg.get('threshold_rain', 0)

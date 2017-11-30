@@ -1,6 +1,33 @@
+#!/usr/bin/env python3
+
+import logging
+import numpy as np
+import re
+import serial
+import sys
+import time
+import requests
+
+from datetime import datetime as dt
+from dateutil.parser import parse as date_parser
+
+import astropy.units as u
+from astropy.units import cds
+from astropy.table import Table
+from astropy.time import Time, TimeISO, TimeDelta
+
+from pocs.utils.messaging import PanMessaging
+
+from . import load_config
+from .PID import PID
+
+
+def get_mongodb():
+    from pocs.utils.database import PanMongo
+    return PanMongo()
 
 # -----------------------------------------------------------------------------
-#   Base class for weather data readers
+#   Base class to read and check weather data
 # -----------------------------------------------------------------------------
 class WeatherAbstract(object):
 
@@ -8,67 +35,77 @@ class WeatherAbstract(object):
         required location.
     """
 
-    def __init__(self):
+    def __init__(self, use_mongo=True):
+        self.config = load_config()
 
-        return NotImplemented
+        # Read configuration
+        self.cfg = self.config['weather']['aag_cloud']
+        self.safety_delay = self.cfg.get('safety_delay', 15.)
+
+        self.logger = logging.getLogger(self.cfg.get('product', 'product-unknown'))
+        self.logger.setLevel(logging.INFO)
+
+        self.db = None
+        if use_mongo:
+            self.db = get_mongodb()
+
+        self.messaging = None
+        self.safe_dict = None
+        self.weather_entries = list()
 
     @abstractmethod
-    def send_message(self):
-        """ Sends a message to a specified location.
-        """
-        return NotImplemented
+    def send_message(self, msg, channel='weather'):
+        if self.messaging is None:
+            self.messaging = PanMessaging.create_publisher(6510)
+
+        self.messaging.send_message(channel, msg)
 
     @abstractmethod
     def capture(self):
-        """ Creates a dictionary to store all the information about the
-        weather data that has been obtained.
+        self.logger.debug("Updating weather data")
 
-        Should use `send_message` on the dictionary and then store the
-        data in the mongo database.
+        data = {}
+        data['Product'] = self.cfg.get('product')
 
-        returns: the dictionary of all the data.
-        """
-        return NotImplemented
+        return data
 
+    # still needs to be improved
     @abstractmethod
     def make_safety_decision(self):
-        """ Results from `_get_cloud_safety`, `_get_wind_safety` and
-        `_get_rain_safety` are checked with each other to get a decision
-        whether or not the weather is safe for viewing.
+        self.logger.debug('Making safety decision with {}'.format(self.cfg.get('product')))
 
-        Only safe when all the individual safety conditions are True.
+        return {'Safe': safe,
+                'Sky': cloud[0],
+                'Wind': wind[0],
+                'Gust': gust[0],
+                'Rain': rain[0]}
 
-        Returns: Safety, Wind, Cloud and Rain condition.
-        """
-        return NotImplemented
-
+    # still needs to be improved
     @abstractmethod
     def _get_cloud_safety(self):
-        """ Defines thresholds/parameters for the cloud condition that define
-        safe. Gets cloud data from a source and checks values with the
-        parameters to decide if it is safe and what its condition is.
+        safety_delay = self.safety_delay
 
-        Returns: Cloud condition and safety
-        """
-        return NotImplemented
+        threshold_cloudy = self.cfg.get('threshold_cloudy', -22.5)
+        threshold_very_cloudy = self.cfg.get('threshold_very_cloudy', -15.)
 
+        return cloud_condition, sky_safe
+
+    # still needs to be improved
     @abstractmethod
     def _get_wind_safety(self):
-        """ Defines thresholds/parameters for the wind and gust condition that
-        define safe. Gets wind and gust data from a source and checks values
-        with the parameters to decide if they aresafe and what the condition
-        are.
+        safety_delay = self.safety_delay
 
-        Returns: Wind condition and safety, and gust condition and safety.
-        """
-        return NotImplemented
+        threshold_windy = self.cfg.get('threshold_windy', 20)
+        threshold_very_windy = self.cfg.get('threshold_very_windy', 30)
 
+        threshold_gusty = self.cfg.get('threshold_gusty', 40)
+        threshold_very_gusty = self.cfg.get('threshold_very_gusty', 50)
+
+        return (wind_condition, wind_safe), (gust_condition, gust_safe)
+
+    # still needs to be improved
     @abstractmethod
     def _get_rain_safety(self):
-        """ Defines thresholds/parameters for the rain condition that define
-        safe. Gets rain data from a source and checks values with the
-        parameters to decide if it is safe and what its condition is.
+        safety_delay = self.safety_delay
 
-        Returns: Rain condition and safety.
-        """
-        return NotImplemented
+        return rain_condition, rain_safe

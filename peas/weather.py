@@ -16,6 +16,7 @@ from pocs.utils.messaging import PanMessaging
 
 from . import load_config
 from .PID import PID
+from weather_abstract import WeatherAbstract
 
 
 def get_mongodb():
@@ -32,7 +33,7 @@ def movingaverage(interval, window_size):
 # -----------------------------------------------------------------------------
 # AAG Cloud Sensor Class
 # -----------------------------------------------------------------------------
-class AAGCloudSensor(object):
+class AAGCloudSensor(WeatherAbstract):
 
     """
     This class is for the AAG Cloud Sensor device which can be communicated with
@@ -102,20 +103,7 @@ class AAGCloudSensor(object):
     """
 
     def __init__(self, serial_address=None, use_mongo=True):
-        self.config = load_config()
-        self.logger = logging.getLogger('aag-cloudsensor')
-        self.logger.setLevel(logging.INFO)
-
-        # Read configuration
-        self.cfg = self.config['weather']['aag_cloud']
-
-        self.safety_delay = self.cfg.get('safety_delay', 15.)
-
-        self.db = None
-        if use_mongo:
-            self.db = get_mongodb()
-
-        self.messaging = None
+        WeatherAbstract.__init__(self, use_mongo=True)
 
         # Initialize Serial Connection
         if serial_address is None:
@@ -153,7 +141,6 @@ class AAGCloudSensor(object):
         self.PWM = None
         self.errors = None
         self.switch = None
-        self.safe_dict = None
         self.hibernate = 0.500  # time to wait after failed query
 
         # Set Up Heater
@@ -216,8 +203,6 @@ class AAGCloudSensor(object):
             '!E': 0.350,
             'P\d\d\d\d!': 0.750,
         }
-
-        self.weather_entries = list()
 
         if self.AAG:
             # Query Device Name
@@ -603,19 +588,13 @@ class AAGCloudSensor(object):
             self.wind_speed = None
         return self.wind_speed
 
+    @property
     def send_message(self, msg, channel='weather'):
-        if self.messaging is None:
-            self.messaging = PanMessaging.create_publisher(6510)
 
-        self.messaging.send_message(channel, msg)
-
+    @property
     def capture(self, use_mongo=False, send_message=False, **kwargs):
         """ Query the CloudWatcher """
 
-        self.logger.debug("Updating weather")
-
-        data = {}
-        data['weather_sensor_name'] = self.name
         data['weather_sensor_firmware_version'] = self.firmware_version
         data['weather_sensor_serial_number'] = self.serial_number
 
@@ -784,11 +763,8 @@ class AAGCloudSensor(object):
                 ))
                 self.set_PWM(new_PWM)
 
+    @property ###
     def make_safety_decision(self, current_values):
-        """
-        Method makes decision whether conditions are safe or unsafe.
-        """
-        self.logger.debug('Making safety decision')
         self.logger.debug('Found {} weather data entries in last {:.0f} minutes'.format(
             len(self.weather_entries), self.safety_delay))
 
@@ -815,12 +791,9 @@ class AAGCloudSensor(object):
                 'Gust': gust[0],
                 'Rain': rain[0]}
 
+    @property ###
     def _get_cloud_safety(self, current_values):
-        safety_delay = self.safety_delay
-
         entries = self.weather_entries
-        threshold_cloudy = self.cfg.get('threshold_cloudy', -22.5)
-        threshold_very_cloudy = self.cfg.get('threshold_very_cloudy', -15.)
 
         sky_diff = [x['sky_temp_C'] - x['ambient_temp_C']
                     for x in entries
@@ -849,17 +822,11 @@ class AAGCloudSensor(object):
 
         return cloud_condition, sky_safe
 
+    @property ###
     def _get_wind_safety(self, current_values):
-        safety_delay = self.safety_delay
         entries = self.weather_entries
 
         end_time = dt.utcnow()
-
-        threshold_windy = self.cfg.get('threshold_windy', 20.)
-        threshold_very_windy = self.cfg.get('threshold_very_windy', 30)
-
-        threshold_gusty = self.cfg.get('threshold_gusty', 40.)
-        threshold_very_gusty = self.cfg.get('threshold_very_gusty', 50.)
 
         # Wind (average and gusts)
         wind_speed = [x['wind_speed_KPH']
@@ -918,8 +885,8 @@ class AAGCloudSensor(object):
 
         return (wind_condition, wind_safe), (gust_condition, gust_safe)
 
+    @property ###
     def _get_rain_safety(self, current_values):
-        safety_delay = self.safety_delay
         entries = self.weather_entries
         threshold_wet = self.cfg.get('threshold_wet', 2000.)
         threshold_rain = self.cfg.get('threshold_rainy', 1700.)
