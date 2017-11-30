@@ -74,34 +74,19 @@ class WeatherData(WeatherAbstract):
         super().send_message()
 
     def capture(self, use_mongo=False, send_message=False, **kwargs):
-        super.capture()
+        self.logger.debug("Updating weather data")
+
+        data = {}
+
         self.table_data = self.fetch_met_data()
         col_names = self.lcl_cfg.get('column_names')
 
         for i in range(0, len('col_names')):
             data[col_names[i]] = self.table_data[col_names[i]][0]
 
-        # Make Safety Decision
-        self.safe_dict = self.make_safety_decision()
-
-        data['Safe'] = self.safe_dict['Safe']
-        data['Sky condition'] = self.safe_dict['Sky']
-        data['Wind condition'] = self.safe_dict['Wind']
-        data['Gust condition'] = self.safe_dict['Gust']
-        data['Rain condition'] = self.safe_dict['Rain']
-
-        # Store current weather
-        self.weather_entries.append(data)
-
-        if send_message:
-            self.send_message({'data': data}, channel='weather')
-
-        if use_mongo:
-            self.db.insert_current('weather', data)
-
         return data
 
-    def make_safety_decision(self):
+    def make_safety_decision(self, ):
         super.make_safety_decision()
         self.logger.debug('Found {} weather data entries in last {:.0f} minutes'.format(
             len(self.fetch_met_data()), self.safety_delay))

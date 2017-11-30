@@ -592,9 +592,13 @@ class AAGCloudSensor(WeatherAbstract):
     def capture(self, use_mongo=False, send_message=False, **kwargs):
         """ Query the CloudWatcher """
 
-        super.capture()
+        self.logger.debug("Updating weather data")
+
+        data = {}
+
         data['weather_sensor_firmware_version'] = self.firmware_version
         data['weather_sensor_serial_number'] = self.serial_number
+        data['date'] = dt.utcnow()
 
         if self.get_sky_temperature():
             data['sky_temp_C'] = self.sky_temp.value
@@ -615,31 +619,6 @@ class AAGCloudSensor(WeatherAbstract):
             data['errors'] = self.errors
         if self.get_wind_speed():
             data['wind_speed_KPH'] = self.wind_speed.value
-
-        # Make Safety Decision
-        self.safe_dict = self.make_safety_decision(data)
-
-        data['safe'] = self.safe_dict['Safe']
-        data['sky_condition'] = self.safe_dict['Sky']
-        data['wind_condition'] = self.safe_dict['Wind']
-        data['gust_condition'] = self.safe_dict['Gust']
-        data['rain_condition'] = self.safe_dict['Rain']
-
-        # Store current weather
-        data['date'] = dt.utcnow()
-        self.weather_entries.append(data)
-
-        # If we get over a certain amount of entries, trim the earliest
-        if len(self.weather_entries) > int(self.safety_delay):
-            del self.weather_entries[:1]
-
-        self.calculate_and_set_PWM()
-
-        if send_message:
-            self.send_message({'data': data}, channel='weather')
-
-        if use_mongo:
-            self.db.insert_current('weather', data)
 
         return data
 

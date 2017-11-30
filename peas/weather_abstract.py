@@ -56,8 +56,23 @@ class WeatherAbstract(object):
         self.messaging.send_message(channel, msg)
 
     def capture(self):
-        self.logger.debug("Updating weather data")
-        data = {}
+        # Make Safety Decision
+        self.safe_dict = self.make_safety_decision(data)
+
+        data['Safe'] = self.safe_dict['Safe']
+        data['Sky condition'] = self.safe_dict['Sky']
+        data['Wind condition'] = self.safe_dict['Wind']
+        data['Gust condition'] = self.safe_dict['Gust']
+        data['Rain condition'] = self.safe_dict['Rain']
+
+        # Store current weather
+        self.weather_entries.append(data)
+
+        if send_message:
+            self.send_message({'data': data}, channel='weather')
+
+        if use_mongo:
+            self.db.insert_current('weather', data)
 
         return data
 
