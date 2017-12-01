@@ -97,12 +97,11 @@ class WeatherData(object):
 
         self.table_data = self.fetch_met_data()
         col_names = self.lcl_cfg.get('column_names')
-
         for i in range(0, len('col_names')):
             data[col_names[i]] = self.table_data[col_names[i]][0]
 
         # Make Safety Decision
-        self.safe_dict = self.make_safety_decision()
+        self.safe_dict = self.make_safety_decision(data)
 
         data['Safe'] = self.safe_dict['Safe']
         data['Sky condition'] = self.safe_dict['Sky']
@@ -122,17 +121,24 @@ class WeatherData(object):
         return data
 
     # decide whether the weather conditions are safe or unsafe
-    def make_safety_decision(self):
+    def make_safety_decision(self, current_values):
         self.logger.debug('Making safety decision with {}'.format(self.lcl_cfg.get('name')))
         self.logger.debug('Found {} weather data entries in last {:.0f} minutes'.format(
-            len(self.fetch_met_data()), self.safety_delay))
+            len(self.weather_entries), self.safety_delay))
 
         safe = False
 
         # Tuple with condition,safety
-        cloud = self._get_cloud_safety()
-        wind, gust = self._get_wind_safety()
-        rain = self._get_rain_alarm_safety()
+        cloud = self._get_cloud_safety(current_values)
+
+        try:
+            wind, gust = self._get_wind_safety(current_values)
+        except Exception as e:
+            self.logger.warning('Problem getting wind safety: {}'.format(e))
+            wind = ['N/A']
+            gust = ['N/A']
+
+        rain = self._get_rain_safety(current_values)
 
         safe = cloud[1] and wind[1] and gust[1] and rain[1]
 
@@ -181,10 +187,10 @@ class WeatherData(object):
         return self._met_data
 
     # check cloud condition
-    def _get_cloud_safety(self):
+    def _get_cloud_safety(self, current_values):
             safety_delay = self.safety_delay
 
-            entries = self.fetch_met_data()
+            entries = self.weather_entries
             threshold_cloudy = self.cfg.get('threshold_cloudy', -22.5)
             threshold_very_cloudy = self.cfg.get('threshold_very_cloudy', -15.)
 
@@ -215,9 +221,9 @@ class WeatherData(object):
             return cloud_condition, sky_safe
 
     # check wind and gust conditions
-    def _get_wind_safety(self):
+    def _get_wind_safety(self, current_values):
             safety_delay = self.safety_delay
-            entries = self.fetch_met_data()
+            entries = self.weather_entries
 
             threshold_windy = self.cfg.get('threshold_windy', 20)
             threshold_very_windy = self.cfg.get('threshold_very_windy', 30)
@@ -277,9 +283,9 @@ class WeatherData(object):
             return (wind_condition, wind_safe), (gust_condition, gust_safe)
 
     # check rain condition
-    def _get_rain_alarm_safety(self):
+    def _get_rain_alarm_safety(self, current_values):
         safety_delay = self.safety_delay
-        entries = self.fetch_met_data()
+        entries = self.weather_entries
 
         threshold_rain = self.lcl_cfg.get('threshold_rain', 0)
         threshold_wet = self.lcl_cfg.get('threshold_wet', 0)
