@@ -60,27 +60,24 @@ class WeatherData(WeatherAbstract):
     """
 
     def __init__(self, use_mongo=True):
-        WeatherAbstract.__init__(self, use_mongo=True)
+        super.__init__(self, use_mongo=use_mongo)
 
-        self.logger = logging.getLogger(self.cfg.get('product_2', 'product-unknown'))
+        self.logger = logging.getLogger(self.web_data.get('name'))
         self.logger.setLevel(logging.INFO)
 
-        self.lcl_cfg = self.local_config['weather']['data']
-        self.max_age = TimeDelta(self.lcl_cfg.get('max_age', 60.), format='sec')
+        self.max_age = TimeDelta(self.web_data.get('max_age', 60.), format='sec')
 
         self.table_data = None
 
-    def send_message(self, msg, channel='weather'):
-        super().send_message()
 
     def capture(self, use_mongo=False, send_message=False, **kwargs):
         self.logger.debug('Updating weather data')
 
         data = {}
 
-        data['weather_data_from'] = self.cfg.get('product_2')
+        data['weather_data_from'] = self.web_data.get('name')
         self.table_data = self.fetch_met_data()
-        col_names = self.lcl_cfg.get('column_names')
+        col_names = self.web_data.get('column_names')
         for i in range(0, len('col_names')):
             data[col_names[i]] = self.table_data[col_names[i]][0]
 
@@ -89,7 +86,7 @@ class WeatherData(WeatherAbstract):
         return data
 
     def make_safety_decision(self, current_values):
-        self.logger.debug('Making safety decision with {}'.format(self.cfg.get('product_2')))
+        self.logger.debug('Making safety decision with {}'.format(self.web_data.get('name')))
         super.make_safety_decision(current_values)
 
         return {'Safe': safe,
@@ -102,11 +99,11 @@ class WeatherData(WeatherAbstract):
         try:
             cache_age = Time.now() - self._met_data['Time (UTC)'][0] * 86400
         except AttributeError:
-            cache_age = self.lcl_cfg.get('cache_age', 1.382e10) * u.year
+            cache_age = self.web_data.get('cache_age', 1.382e10) * u.year
 
         if cache_age > self.max_age:
             # Download met data file
-            m = requests.get(self.lcl_cfg.get('link'))
+            m = requests.get(self.web_data.get('link'))
             # Remove the annoying " and newline between the date and time
             met = m.text.replace('."\n',' ')
             # Remove the " before the date
@@ -114,7 +111,7 @@ class WeatherData(WeatherAbstract):
 
             # Parse the tab delimited met data into a Table
             t = Table.read(met, format='ascii.no_header', delimiter='\t',
-                                names=self.lcl_cfg.get('column_names'))
+                                names=self.web_data.get('column_names'))
 
             # Convert time strings to Time
             t['Time (UTC)'] = Time(t['Time (UTC)'], format='mixed_up_time')
@@ -123,8 +120,8 @@ class WeatherData(WeatherAbstract):
             # Convert from AAT standard time to UTC
             t['Time (UTC)'] = t['Time (UTC)'] - 10 * u.hour
 
-            col_names = self.lcl_cfg.get('column_names')
-            col_units = self.lcl_cfg.get('column_units')
+            col_names = self.web_data.get('column_names')
+            col_units = self.web_data.get('column_units')
 
             if len(col_names) != len(col_units):
                 self.logger.debug('Number of columns does not match number of units given')
@@ -140,8 +137,8 @@ class WeatherData(WeatherAbstract):
     def _get_cloud_safety(self, current_values):
         entries = self.weather_entries
 
-        sky_diff = weather_entries[self.lcl_cfg.get('sky_ambient')]
-        sky_diff_u = weather_entries[self.lcl_cfg.get('sky_ambient_uncertainty')]
+        sky_diff = weather_entries[self.web_data.get('sky_ambient')]
+        sky_diff_u = weather_entries[self.web_data.get('sky_ambient_uncertainty')]
 
         max_sky_diff = sky_diff + sky_diff_u
         last_cloud = sky_diff
@@ -154,8 +151,8 @@ class WeatherData(WeatherAbstract):
         entries = self.weather_entries
 
         # Wind (average and gusts)
-        wind_speed = entries[self.lcl_cfg.get('average_wind_speed')]
-        wind_gust = entries[self.lcl_cfg.get('maximum_wind_gust')]
+        wind_speed = entries[self.web_data.get('average_wind_speed')]
+        wind_gust = entries[self.web_data.get('maximum_wind_gust')]
 
         super._get_wind_safety()
 
@@ -163,13 +160,13 @@ class WeatherData(WeatherAbstract):
 
     def _get_rain_alarm_safety(self, current_values):
         super._get_rain_safety()
-        threshold_rain = self.lcl_cfg.get('threshold_rain', 0)
-        threshold_wet = self.lcl_cfg.get('threshold_wet', 0)
+        threshold_rain = self.web_data.get('threshold_rain', 0)
+        threshold_wet = self.web_data.get('threshold_wet', 0)
 
         # Rain
-        rain_sensor = entries[self.lcl_cfg('rain_sensor')]
-        rain_flag = entries[self.lcl_cfg('rain_flag')]
-        wet_flag = entries[self.lcl_cfg('wet_flag')]
+        rain_sensor = entries[self.web_data('rain_sensor')]
+        rain_flag = entries[self.web_data('rain_flag')]
+        wet_flag = entries[self.web_data('wet_flag')]
 
         if len(rain_sensor) == 0 and len(rain_flag) == 0 and len(wet_flag) == 0:
             rain_safe = False

@@ -38,8 +38,10 @@ class WeatherAbstract(object):
         self.config = load_config()
 
         # Read configuration
-        self.cfg = self.config['weather']['aag_cloud']
-        self.safety_delay = self.cfg.get('safety_delay', 15.)
+        self.sensor_data = self.config['weather']['aag_cloud']
+        self.safety_delay = self.sensor_data.get('safety_delay', 15.)
+
+        self.web_data = self.config['weather']['web_service']
 
         self.db = None
         if use_mongo:
@@ -105,8 +107,8 @@ class WeatherAbstract(object):
     def _get_cloud_safety(self):
         safety_delay = self.safety_delay
 
-        threshold_cloudy = self.cfg.get('threshold_cloudy', -22.5)
-        threshold_very_cloudy = self.cfg.get('threshold_very_cloudy', -15.)
+        threshold_cloudy = self.sensor_data.get('threshold_cloudy', -22.5)
+        threshold_very_cloudy = self.sensor_data.get('threshold_very_cloudy', -15.)
 
         if len(sky_diff) == 0:
             self.logger.debug('  UNSAFE: no sky temperatures found')
@@ -133,11 +135,11 @@ class WeatherAbstract(object):
     def _get_wind_safety(self):
         safety_delay = self.safety_delay
 
-        threshold_windy = self.cfg.get('threshold_windy', 20)
-        threshold_very_windy = self.cfg.get('threshold_very_windy', 30)
+        threshold_windy = self.sensor_data.get('threshold_windy', 20)
+        threshold_very_windy = self.sensor_data.get('threshold_very_windy', 30)
 
-        threshold_gusty = self.cfg.get('threshold_gusty', 40)
-        threshold_very_gusty = self.cfg.get('threshold_very_gusty', 50)
+        threshold_gusty = self.sensor_data.get('threshold_gusty', 40)
+        threshold_very_gusty = self.sensor_data.get('threshold_very_gusty', 50)
 
         if len(wind_gust) == 0:
             self.logger.debug(' UNSAFE: no maximum wind gust readings found')
@@ -191,5 +193,5 @@ class WeatherAbstract(object):
         entries = self.weather_entries
         # since the rain data is different in the two systems
         # can not make a method that satisfies both
-        
+
         return rain_condition, rain_safe
