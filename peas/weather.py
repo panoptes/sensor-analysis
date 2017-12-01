@@ -596,6 +596,7 @@ class AAGCloudSensor(WeatherAbstract):
 
         data = {}
 
+        data['weather_data_from'] = self.cfg.get('product_1')
         data['weather_sensor_firmware_version'] = self.firmware_version
         data['weather_sensor_serial_number'] = self.serial_number
         data['date'] = dt.utcnow()
@@ -619,6 +620,8 @@ class AAGCloudSensor(WeatherAbstract):
             data['errors'] = self.errors
         if self.get_wind_speed():
             data['wind_speed_KPH'] = self.wind_speed.value
+
+        super.capture()
 
         return data
 
@@ -741,27 +744,8 @@ class AAGCloudSensor(WeatherAbstract):
                 self.set_PWM(new_PWM)
 
     def make_safety_decision(self, current_values):
-        super.make_safety_decision()
-        self.logger.debug('Found {} weather data entries in last {:.0f} minutes'.format(
-            len(self.weather_entries), self.safety_delay))
-
-        safe = False
-        data['Product'] = self.cfg.get('product_1')
-
-        # Tuple with condition,safety
-        cloud = self._get_cloud_safety(current_values)
-
-        try:
-            wind, gust = self._get_wind_safety(current_values)
-        except Exception as e:
-            self.logger.warning('Problem getting wind safety: {}'.format(e))
-            wind = ['N/A']
-            gust = ['N/A']
-
-        rain = self._get_rain_safety(current_values)
-
-        safe = cloud[1] & wind[1] & gust[1] & rain[1]
-        self.logger.debug('Weather Safe: {}'.format(safe))
+        self.logger.debug('Making safety decision with {}'.format(self.cfg.get('product_1')))
+        super.make_safety_decision(current_values)
 
         return {'Safe': safe,
                 'Sky': cloud[0],
@@ -785,8 +769,6 @@ class AAGCloudSensor(WeatherAbstract):
     def _get_wind_safety(self, current_values):
         entries = self.weather_entries
 
-        end_time = dt.utcnow()
-
         # Wind (average and gusts)
         wind_speed = [x['wind_speed_KPH']
                       for x in entries
@@ -794,6 +776,7 @@ class AAGCloudSensor(WeatherAbstract):
 
         wind_gust = max(wind_speed)
 
+        end_time = dt.utcnow()
         start_time = date_parser(entries[0]['date'])
         typical_data_interval = (end_time - start_time).total_seconds() / len(entries)
         mavg_count = int(np.ceil(120. / typical_data_interval))  # What is this 120?
@@ -807,8 +790,6 @@ class AAGCloudSensor(WeatherAbstract):
 
     def _get_rain_safety(self, current_values):
         super._get_rain_safety()
-        entries = self.weather_entries
-
         threshold_wet = self.cfg.get('threshold_wet', 2000.)
         threshold_rain = self.cfg.get('threshold_rainy', 1700.)
 

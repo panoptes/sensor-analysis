@@ -76,8 +76,25 @@ class WeatherAbstract(object):
 
         return data
 
-    def make_safety_decision(self):
-        self.logger.debug('Making safety decision with {}'.format(self.cfg.get('product')))
+    def make_safety_decision(self, current_values):
+        self.logger.debug('Found {} weather data entries in last {:.0f} minutes'.format(
+            len(self.weather_entries), self.safety_delay))
+        safe = False
+
+        # Tuple with condition,safety
+        cloud = self._get_cloud_safety(current_values)
+
+        try:
+            wind, gust = self._get_wind_safety(current_values)
+        except Exception as e:
+            self.logger.warning('Problem getting wind safety: {}'.format(e))
+            wind = ['N/A']
+            gust = ['N/A']
+
+        rain = self._get_rain_safety(current_values)
+
+        safe = cloud[1] & wind[1] & gust[1] & rain[1]
+        self.logger.debug('Weather Safe: {}'.format(safe))
 
         return {'Safe': safe,
                 'Sky': cloud[0],
@@ -171,5 +188,8 @@ class WeatherAbstract(object):
 
     def _get_rain_safety(self):
         safety_delay = self.safety_delay
-
+        entries = self.weather_entries
+        # since the rain data is different in the two systems
+        # can not make a method that satisfies both
+        
         return rain_condition, rain_safe
