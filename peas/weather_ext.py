@@ -74,7 +74,7 @@ class WeatherData(WeatherAbstract):
         super().send_message()
 
     def capture(self, use_mongo=False, send_message=False, **kwargs):
-        self.logger.debug("Updating weather data")
+        self.logger.debug('Updating weather data')
 
         data = {}
 
@@ -125,6 +125,10 @@ class WeatherData(WeatherAbstract):
 
             col_names = self.lcl_cfg.get('column_names')
             col_units = self.lcl_cfg.get('column_units')
+
+            if len(col_names) != len(col_units):
+                self.logger.debug('Number of columns does not match number of units given')
+
             # Set units for items that have them
             for i in range(1, len('col_names')):
                 t[col_names[i]].unit = col_units[i]
