@@ -97,6 +97,8 @@ class PanSensorShell(cmd.Cmd):
                 log.setLevel(get_level[log.getEffectiveLevel()])
             except Exception as e:
                 print_error("Can't change log level for {}".format(sensor))
+        else:
+            print_warning("No such sensor: {}".format(sensor))
 
 ##################################################################################################
 # Load Methods
@@ -174,10 +176,27 @@ class PanSensorShell(cmd.Cmd):
             'cam_0': {'pin': 5, 'board': 'camera_board'},
             'cam_1': {'pin': 6, 'board': 'camera_board'},
         }
+        if relay not in relay_lookup:
+            print_warning("Unknown relay: {}".format(relay))
+            names = sorted(relay_lookup.keys())
+            print_warning("Expected one of: {}".format(", ".join(names)))
+            return
+
+        relay_info = relay_lookup[relay]
+        board = relay_info['board']
+        pin = relay_info['pin']
+
+        if board not in self.environment.serial_readers:
+            print_warning("{} reader not found for relay {}".format(board, relay))
+            return
 
         try:
-            relay_info = relay_lookup[relay]
-            self.environment.serial_readers[relay_info['board']]['reader'].write("{},9".format(relay_info['pin']))
+            # Preceed with " \n" so that if the board has received a partial
+            # line it won't be interpreted as valid. We don't have a very strong
+            # protocol for the computer to Arduino communication, so this is an
+            # attempt to avoid misinterpretation.
+            msg = " \n{},9\n".format(pin)
+            self.environment.serial_readers[board]['reader'].write(msg)
         except Exception as e:
             print_warning("Problem toggling relay {}".format(relay))
             print_warning(e)
